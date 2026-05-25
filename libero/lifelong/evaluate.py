@@ -48,10 +48,12 @@ import time
 
 
 benchmark_map = {
-    "libero_10": "LIBERO_10",
-    "libero_spatial": "LIBERO_SPATIAL",
-    "libero_object": "LIBERO_OBJECT",
-    "libero_goal": "LIBERO_GOAL",
+    "libero_object_all_variance": "LIBERO_OBJECT_ALL_VARIANCE",
+    "libero_object_target_basket_swap_variance": "LIBERO_OBJECT_TARGET_BASKET_SWAP_VARIANCE",
+    "libero_object_target_permutation_variance": "LIBERO_OBJECT_TARGET_PERMUTATION_VARIANCE",
+    "libero_object_target_pos_var20x20": "LIBERO_OBJECT_TARGET_POS_VAR20X20",
+    "libero_popcorn_production": "LIBERO_POPCORN_PRODUCTION",
+    "libero_crate_washing": "LIBERO_CRATE_WASHING",
 }
 
 algo_map = {
@@ -77,7 +79,7 @@ def parse_args():
         "--benchmark",
         type=str,
         required=True,
-        choices=["libero_10", "libero_spatial", "libero_object", "libero_goal"],
+        choices=list(benchmark_map.keys()),
     )
     parser.add_argument("--task_id", type=int, required=True)
     # method detail
