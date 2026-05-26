@@ -12,7 +12,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from libero.libero.vab import load_task
+try:
+    from libero.vab import load_task                  # pip install -e .
+except ImportError:
+    from libero.libero.vab import load_task           # run-from-source (CWD=repo)
 
 SEED_TASKS_DIR = Path(__file__).resolve().parents[1] / "seed_tasks"
 SEED_TASK_FILES = sorted(SEED_TASKS_DIR.glob("*.yaml"))

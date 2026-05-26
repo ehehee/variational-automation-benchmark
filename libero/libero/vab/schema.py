@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
 
 class ArenaSpec(BaseModel):
@@ -46,7 +46,7 @@ class Task(BaseModel):
     horizon: int = 500
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    _source_path: Optional[Path] = None
+    _source_path: Optional[Path] = PrivateAttr(default=None)
 
     @field_validator("inits")
     @classmethod

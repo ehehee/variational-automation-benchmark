@@ -80,6 +80,11 @@ class VABEnv(SingleArmEnv):
         self._last_success: bool = False
         self._current_init_index: int = task.default_init_index
 
+        # Strict-obs policy: tell robosuite we do not want object observables.
+        self.use_object_obs = False
+        self.reward_scale = 1.0
+        self.reward_shaping = False
+
         super().__init__(
             robots=[robot_class_name],
             env_configuration="default",
@@ -88,9 +93,6 @@ class VABEnv(SingleArmEnv):
             gripper_types="default",
             initialization_noise=None,
             use_camera_obs=True,
-            use_object_obs=False,
-            reward_scale=1.0,
-            reward_shaping=False,
             has_renderer=has_renderer,
             has_offscreen_renderer=has_offscreen_renderer,
             render_camera="frontview",
@@ -226,13 +228,16 @@ class VABEnv(SingleArmEnv):
                 key_depth = f"{cam}_depth"
                 if key_depth in raw:
                     images[f"{cam}_depth"] = raw[key_depth]
-        proprio = {
-            "joint_pos": np.asarray(raw["robot0_joint_pos"], dtype=np.float32),
-            "joint_vel": np.asarray(raw["robot0_joint_vel"], dtype=np.float32),
-            "eef_pos": np.asarray(raw["robot0_eef_pos"], dtype=np.float32),
-            "eef_quat": np.asarray(raw["robot0_eef_quat"], dtype=np.float32),
-            "gripper_qpos": np.asarray(raw["robot0_gripper_qpos"], dtype=np.float32),
-        }
+        proprio: Dict[str, np.ndarray] = {}
+        for src, dst in (
+            ("robot0_joint_pos", "joint_pos"),
+            ("robot0_joint_vel", "joint_vel"),
+            ("robot0_eef_pos", "eef_pos"),
+            ("robot0_eef_quat", "eef_quat"),
+            ("robot0_gripper_qpos", "gripper_qpos"),
+        ):
+            if src in raw:
+                proprio[dst] = np.asarray(raw[src], dtype=np.float32)
         return {"images": images, "proprio": proprio}
 
     @property

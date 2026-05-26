@@ -15,7 +15,7 @@ pip install -e .
 
 ```python
 import numpy as np
-from libero.libero.vab import load_task
+from libero.vab import load_task
 
 task = load_task("seed_tasks/living_room_cream_cheese_in_basket.yaml")
 env  = task.make_env()
