@@ -1,0 +1,41 @@
+id: libero_popcorn_production.kitchen_scene9_popcorn_production
+language: put the frying pan on the stove turn on the stove then turn it off and move the frying pan off the stove
+arena: {name: kitchen}
+robot: {name: panda, controller: OSC_POSE}
+cameras: [agentview, robot0_eye_in_hand]
+camera_height: 128
+camera_width: 128
+camera_depth: false
+objects:
+  - {id: flat_stove,             asset: flat_stove}
+  - {id: chefmate_8_frypan,      asset: chefmate_8_frypan}
+  - {id: white_bowl,             asset: white_bowl}
+  - {id: wooden_two_layer_shelf, asset: wooden_two_layer_shelf}
+inits:
+  - flat_stove:             [-0.200, 0.300, 0.93, 0, 0, 0, 1]
+    chefmate_8_frypan:      [0.050, 0.000, 0.93, 0, 0, 0, 1]
+    white_bowl:             [-0.150, 0.100, 0.93, 0, 0, 0, 1]
+    wooden_two_layer_shelf: [0.000, -0.250, 0.93, 0, 0, 1, 0]
+  - flat_stove:             [-0.205, 0.295, 0.93, 0, 0, 0, 1]
+    chefmate_8_frypan:      [0.060, 0.010, 0.93, 0, 0, 0, 1]
+    white_bowl:             [-0.140, 0.110, 0.93, 0, 0, 0, 1]
+    wooden_two_layer_shelf: [0.005, -0.250, 0.93, 0, 0, 1, 0]
+  - flat_stove:             [-0.210, 0.310, 0.93, 0, 0, 0, 1]
+    chefmate_8_frypan:      [0.040, -0.010, 0.93, 0, 0, 0, 1]
+    white_bowl:             [-0.155, 0.095, 0.93, 0, 0, 0, 1]
+    wooden_two_layer_shelf: [-0.005, -0.260, 0.93, 0, 0, 1, 0]
+default_init_index: 0
+success:
+  predicate: on_top_of
+  args:
+    obj: chefmate_8_frypan
+    surface: flat_stove
+    xy_tol: 0.15
+    z_min: 0.01
+    z_max: 0.30
+horizon: 800
+metadata:
+  suite: libero_popcorn_production
+  source: ported_from_bddl
+  original_goal: "Sequence(On frypan stove_cook_region; Turnon stove; Turnoff stove; Not(On frypan stove_cook_region))"
+  v1_note: "Single-stage simplification (frypan on stove). Multi-stage Turnon/Turnoff/Removal pending stage-aware SuccessSpec."

@@ -35,6 +35,7 @@ class Task(BaseModel):
     language: str
     arena: ArenaSpec
     robot: RobotSpec = Field(default_factory=RobotSpec)
+    robots: Optional[List[RobotSpec]] = None     # bimanual: list of 2; else None
     cameras: List[str] = Field(default_factory=lambda: ["agentview", "robot0_eye_in_hand"])
     camera_height: int = 128
     camera_width: int = 128
@@ -84,6 +85,10 @@ class Task(BaseModel):
         return len(self.inits)
 
     def make_env(self, **overrides):
+        if self.robots and len(self.robots) >= 2:
+            from .bimanual_env import VABBimanualEnv
+
+            return VABBimanualEnv(task=self, **overrides)
         from .env import VABEnv
 
         return VABEnv(task=self, **overrides)
