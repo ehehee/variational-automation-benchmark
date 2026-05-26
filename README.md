@@ -1,25 +1,10 @@
-# Variational Automation Benchmark
+# Variational Automation Benchmark (VAB)
 
-Derivative of [LIBERO-PosVar](https://github.com/ehehee/LIBERO-PosVar) containing only the six new benchmark suites
-developed on the `vos-variance-suites` and `bosch/crate-washing` branches. All original LIBERO and LIBERO-Pro task
-definitions have been removed; the simulator, environment wrappers, asset library, and lifelong-learning infrastructure
-are inherited intact.
+Self-contained-YAML manipulation benchmark. One file per task: arena, robot,
+objects, initial states, success predicate, language. No BDDL, no sidecar
+init file, no privileged information surfaced to the agent.
 
-## Suites
-
-| Suite | Tasks | Description |
-| --- | --- | --- |
-| `libero_object_target_pos_var20x20` | 10 | LIBERO-Object pick-and-place with a 20×20 grid of target-basket positions to measure spatial generalisation. |
-| `libero_object_target_permutation_variance` | 10 | Target basket and distractor objects permuted across the workspace. |
-| `libero_object_target_basket_swap_variance` | 10 | Target basket swapped with distractor basket on each trial. |
-| `libero_object_all_variance` | 10 | Combined variance suite: position, permutation, and basket-swap perturbations applied jointly. |
-| `libero_popcorn_production` | 1 | Single-task multi-stage suite — place frypan on stove → turn on → turn off → remove. Per-stage success is enforced by `Libero_Kitchen_Popcorn_Production`. |
-| `libero_crate_washing` | 1 | Bimanual single-task suite — two Franka Pandas lift the top crate of an 11-crate stack onto an adjacent washing-machine table. Per-stage progress (`lifted` → `placed`) is exposed by `Libero_Crate_Washing`. |
-
-All BDDL files live under `libero/libero/bddl_files/<suite>/` and initial states under `libero/libero/init_files/<suite>/`.
-Registrations are in `libero/libero/benchmark/__init__.py`.
-
-## Installation
+## Quick start
 
 ```bash
 git clone https://github.com/ehehee/Variational-Automation-Benchmark.git
@@ -28,59 +13,122 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-Requires MuJoCo / robosuite (see `requirements.txt`).
+```python
+import numpy as np
+from libero.libero.vab import load_task
 
-## Usage
+task = load_task("seed_tasks/living_room_cream_cheese_in_basket.yaml")
+env  = task.make_env()
+
+for i in range(task.n_inits):
+    obs = env.reset(init_index=i)
+    # obs.keys() == {"images", "proprio"} -- nothing else.
+    for _ in range(50):
+        obs, reward, done, info = env.step(np.zeros(env.action_dim))
+    print(f"init {i}: success={info['success']}")
+env.close()
+```
+
+## Observation contract (strict)
 
 ```python
-from libero.libero import benchmark
-
-bench = benchmark.get_benchmark("libero_crate_washing")()
-print(bench.get_num_tasks(), bench.get_task_names())
-
-bddl_path = bench.get_task_bddl_file_path(0)
-init_states = bench.get_task_init_states(0)
+obs = {
+    "images":  {camera_name: uint8[H,W,3], ...},   # one per camera in YAML
+    "proprio": {
+        "joint_pos":    float32[7],
+        "joint_vel":    float32[7],
+        "eef_pos":      float32[3],
+        "eef_quat":     float32[4],   # xyzw
+        "gripper_qpos": float32[2],
+    },
+}
 ```
 
-Sanity-check that all bddl and init files are in place:
+No object names, no ground-truth poses, no segmentation masks. Success is
+returned only as `info["success"]: bool` from `env.step`.
 
-```bash
-python benchmark_scripts/check_task_suites.py
+## Task YAML
+
+```yaml
+id: living_room.cream_cheese_in_basket   # required, unique
+language: "Put the cream cheese in the basket."
+
+arena:
+  name: living_room        # living_room | kitchen | study | coffee_table | floor | table
+  # scene_xml: optional override (path under libero/libero/assets/)
+  # scene_properties: { floor_style: ..., wall_style: ... }   # optional
+
+robot:
+  name: panda
+  controller: OSC_POSE
+
+cameras: [agentview, robot0_eye_in_hand]
+camera_height: 128
+camera_width: 128
+camera_depth: false
+
+objects:
+  - { id: cream_cheese, asset: cream_cheese }   # asset = registered OBJECTS_DICT key
+  - { id: basket,       asset: basket }
+
+inits:                                          # one or more init variants
+  - cream_cheese: [x, y, z, qx, qy, qz, qw]     # xyzw quaternion
+    basket:       [x, y, z, qx, qy, qz, qw]
+  - cream_cheese: [...]
+    basket:       [...]
+default_init_index: 0                           # used when env.reset() has no init_index
+
+success:
+  predicate: contained_in
+  args: { obj: cream_cheese, container: basket, xy_tol: 0.08, z_low: -0.02, z_high: 0.20 }
+
+horizon: 400
+metadata: { suite: object_target_pos_var, difficulty: easy }
 ```
 
-## Tooling
+## Success predicates (v1)
 
-Scripts specific to the new suites live in `scripts/`:
+Registered in `libero/libero/vab/predicates.py`. Add new ones by appending to
+the `PREDICATES` registry; each takes `(sim, body_ids, **args) -> bool`.
 
-- `teleop_crate_washing.py` — bimanual teleop for the crate-washing scene.
-- `view_crate_washing.py` — interactive viewer for the scene.
-- `bake_crate_washing_init.py`, `bake_libero_crate_waypoints.py`, `bake_first_frame_init.py` — generate / re-bake initial states.
-- `verify_baked_init.py` — sanity-check baked init files.
-- `eval_crate_washing_smoke.py` — minimal smoke test for the crate-washing env.
-- `permute_distractor_init.py`, `render_permuted_trials.py` — utilities for the variance suites.
+| predicate | required args | optional args |
+| --- | --- | --- |
+| `contained_in`  | `obj`, `container`            | `xy_tol`, `z_low`, `z_high` |
+| `on_top_of`     | `obj`, `surface`              | `xy_tol`, `z_min`, `z_max` |
+| `near`          | `obj_a`, `obj_b`              | `threshold` |
+| `oriented_like` | `obj`, `quat` (xyzw)          | `tol_deg` |
+| `lifted_above`  | `obj`, `z_min`                | -- |
 
 ## Layout
 
 ```
 libero/libero/
-├── assets/        # shared scene XMLs, textures, scanned objects (+ new crate_washing scene)
-├── bddl_files/    # 6 suites
-├── init_files/    # 6 suites
-├── benchmark/     # registration: __init__.py, libero_suite_task_map.py
-├── envs/          # simulator wrappers + new crate-washing arena and bimanual base domain
-└── utils/         # shared helpers
-libero/lifelong/   # lifelong-learning algorithms / training loop (inherited from upstream)
-benchmark_scripts/ # check_task_suites.py, render_single_task.py
-scripts/           # see Tooling above
-templates/         # scene / problem-class templates for adding new suites
+├── assets/            # scene XMLs, textures, scanned/CAD meshes (runtime-essential)
+├── envs/              # robosuite primitives: arenas/, robots/, objects/, textures.py
+└── vab/               # YAML loader + strict-obs env
+    ├── schema.py
+    ├── loader.py
+    ├── env.py
+    ├── predicates.py
+    └── _arena_table.py
+seed_tasks/            # canonical example tasks
+tests/test_smoke.py    # end-to-end loader + env validation
 ```
 
-## Provenance
+## Smoke test
 
-Built from upstream LIBERO-PosVar at branches `vos-variance-suites` and `bosch/crate-washing`. The original LIBERO-100,
-LIBERO-Spatial/Object/Goal task families and their `_with_*` variants, the LIBERO-OOD configs, and the upstream demo
-notebooks have been removed.
+```bash
+pytest tests/test_smoke.py -v
+# also dumps one agentview RGB per task to /tmp/vab_smoke/
+```
+
+## Roadmap
+
+- Re-author the legacy 10×10 eval matrix (object_swap / pos_var / perm /
+  basket_swap) programmatically from a Python template.
+- Bimanual / crate-washing support (v1 is single-arm only).
+- Action space beyond `OSC_POSE`.
 
 ## License
 
-MIT (inherited from upstream LIBERO / LIBERO-PosVar — see `LICENSE`).
+MIT.

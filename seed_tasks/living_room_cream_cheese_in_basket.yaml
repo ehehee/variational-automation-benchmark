@@ -1,0 +1,43 @@
+id: living_room.cream_cheese_in_basket
+language: "Put the cream cheese in the basket."
+
+arena:
+  name: living_room
+
+robot:
+  name: panda
+  controller: OSC_POSE
+
+cameras: [agentview, robot0_eye_in_hand]
+camera_height: 128
+camera_width: 128
+camera_depth: false
+
+objects:
+  - { id: cream_cheese, asset: cream_cheese }
+  - { id: basket,       asset: basket }
+
+inits:
+  - cream_cheese: [0.10, -0.05, 0.43, 0, 0, 0, 1]
+    basket:       [0.10,  0.20, 0.43, 0, 0, 0, 1]
+  - cream_cheese: [0.08, -0.10, 0.43, 0, 0, 0, 1]
+    basket:       [0.12,  0.22, 0.43, 0, 0, 0, 1]
+  - cream_cheese: [0.12,  0.00, 0.43, 0, 0, 0, 1]
+    basket:       [0.08,  0.18, 0.43, 0, 0, 0, 1]
+
+default_init_index: 0
+
+success:
+  predicate: contained_in
+  args:
+    obj: cream_cheese
+    container: basket
+    xy_tol: 0.08
+    z_low: -0.02
+    z_high: 0.20
+
+horizon: 400
+
+metadata:
+  suite: object_target_pos_var
+  difficulty: easy
