@@ -6,7 +6,7 @@ init file, no privileged information surfaced to the agent.
 
 ## Suites
 
-42 tasks across 6 suites under `tasks/`:
+52 tasks across 7 suites under `tasks/`:
 
 | Suite | Tasks × Seeds | Description |
 | --- | --- | --- |
@@ -14,6 +14,7 @@ init file, no privileged information surfaced to the agent.
 | `libero_object_target_permutation_variance` | 10 × 50 | Target basket and distractor objects permuted across the workspace. |
 | `libero_object_target_basket_swap_variance` | 10 × 50 | Target basket swapped with distractor basket on each trial. |
 | `libero_object_all_variance` | 10 × 50 | Combined variance suite: position, permutation, and basket-swap perturbations applied jointly. |
+| `libero_object_packing` | 10 × 50 | Multi-item packing variant of `libero_object_all_variance` — every grocery item on the floor must end up in the basket. Uses the stateful `pack_all_into` predicate (delivered items teleport to a far graveyard pose so they cannot regress; success when all 6 delivered). Reports both `success` (binary) and `completion_rate` (`delivered/6`). |
 | `libero_popcorn_production` | 1 × 50 | Single-task multi-stage suite — place frypan on stove → turn on → turn off → remove. **v1 success check is single-stage (`on_top_of`)**; full sequence pending stage-aware `SuccessSpec`. |
 | `libero_crate_washing` | 1 × 5 | Bimanual single-task suite — two Franka Pandas lift the top crate of an 11-crate stack onto a washing-machine table. **v1 success check is `lifted_above`**; full `Lifted → Placed` sequence pending. |
 
@@ -65,7 +66,10 @@ For bimanual tasks (e.g. `crate_washing`) proprio keys are
 `robot0_*` and `robot1_*`; `action_dim` is 14.
 
 No object names, no ground-truth poses, no segmentation masks. Success is
-returned only as `info["success"]: bool` from `env.step`.
+returned only as `info["success"]: bool` from `env.step`. Multi-target
+predicates (e.g. `pack_all_into`) additionally surface partial credit via
+`info["completion_rate"]: float` (0..1) and
+`env.delivery_progress() -> tuple[int, int] | None`.
 
 ## Task YAML
 
@@ -121,6 +125,17 @@ the `PREDICATES` registry; each takes `(sim, body_ids, **args) -> bool`.
 | `near`          | `obj_a`, `obj_b`              | `threshold` |
 | `oriented_like` | `obj`, `quat` (xyzw)          | `tol_deg` |
 | `lifted_above`  | `obj`, `z_min`                | — |
+| `pack_all_into` | `objs` (list), `container`    | `xy_tol`, `z_low`, `z_high` |
+
+`pack_all_into` is **stateful**: it tracks delivery on `sim._packing_state`
+and teleports each delivered object to a far graveyard pose so it cannot
+regress (matches the retired LIBERO-PosVar `Libero_Grocery_Packing`
+behavior). Partial progress is exposed via
+`env.delivery_progress() -> (delivered, total)` and `info["completion_rate"]`.
+State is reset on every `env.reset()`. Predicates that need joint-level
+state mutations can opt in by declaring a `joint_names` kwarg —
+`evaluate` introspects the signature and forwards the per-object
+free-joint name table only when requested.
 
 ## Rendering / inspection
 

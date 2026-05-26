@@ -57,6 +57,7 @@ class VABEnv(SingleArmEnv):
         render_gpu_device_id: int = -1,
         ignore_done: bool = True,
         hard_reset: bool = True,
+        controller: Optional[str] = None,
         **kwargs,
     ):
         self.task = task
@@ -71,7 +72,7 @@ class VABEnv(SingleArmEnv):
 
         robot_class_name = f"{self._arena_spec['robot_prefix']}{task.robot.name.capitalize()}"
         controller_configs = suite.load_controller_config(
-            default_controller=task.robot.controller
+            default_controller=controller or task.robot.controller
         )
 
         self._mujoco_objects = []
@@ -172,6 +173,12 @@ class VABEnv(SingleArmEnv):
         observables = super()._setup_observables()
         for key in list(observables.keys()):
             if key in _PROPRIO_KEYS:
+                # Robosuite leaves ``robot0_joint_pos`` ``active=False`` by
+                # default (sin/cos encoding is preferred). Explicitly turn
+                # it on so the proprio dict actually contains every entry
+                # in ``_PROPRIO_KEYS``.
+                observables[key].set_enabled(True)
+                observables[key].set_active(True)
                 continue
             if key.endswith("_image") or key.endswith("_depth"):
                 continue
@@ -197,6 +204,11 @@ class VABEnv(SingleArmEnv):
         self._current_init_index = init_index
         self._apply_init(init_index)
         self._last_success = False
+        # Drop any stateful-predicate scratch (e.g. pack_all_into's
+        # delivery set). With hard_reset=True the sim is rebuilt and
+        # this attribute is gone anyway; the pop keeps hard_reset=False
+        # callers correct.
+        self.sim.__dict__.pop("_packing_state", None)
         return self._filter_obs(self._get_observations(force_update=True))
 
     def step(self, action):
@@ -205,6 +217,14 @@ class VABEnv(SingleArmEnv):
         info = dict(info) if info else {}
         info["success"] = self._last_success
         info["language"] = self.task.language
+        progress = self.delivery_progress()
+        if progress is not None:
+            delivered, total = progress
+            info["completion_rate"] = (
+                float(delivered) / float(total) if total else 0.0
+            )
+        else:
+            info["completion_rate"] = 1.0 if self._last_success else 0.0
         return self._filter_obs(obs), reward, done, info
 
     def _check_success(self) -> bool:
@@ -213,7 +233,21 @@ class VABEnv(SingleArmEnv):
             self._obj_body_id,
             self.task.success.predicate,
             dict(self.task.success.args),
+            joint_names=self._obj_joint_name,
         )
+
+    def delivery_progress(self) -> Optional[tuple]:
+        """Return ``(delivered, total)`` for multi-target predicates.
+
+        Read from ``sim._packing_state`` (populated by ``pack_all_into``).
+        ``None`` for every predicate that doesn't track per-target
+        progress, in which case callers should fall back to the binary
+        success verdict.
+        """
+        state = getattr(self.sim, "_packing_state", None)
+        if state is None:
+            return None
+        return (len(state["delivered"]), len(state["objs"]))
 
     def reward(self, action=None) -> float:
         return 1.0 if self._check_success() else 0.0

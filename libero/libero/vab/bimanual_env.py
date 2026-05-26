@@ -45,6 +45,7 @@ class VABBimanualEnv(TwoArmEnv):
         render_gpu_device_id: int = -1,
         ignore_done: bool = True,
         hard_reset: bool = True,
+        controller: Optional[str] = None,
         **kwargs,
     ):
         self.task = task
@@ -67,7 +68,7 @@ class VABBimanualEnv(TwoArmEnv):
         ]
         # Use the first robot's controller for both (per robosuite TwoArmEnv).
         controller_configs = suite.load_controller_config(
-            default_controller=task.robots[0].controller
+            default_controller=controller or task.robots[0].controller
         )
 
         self._obj_body_id: Dict[str, int] = {}
@@ -149,6 +150,11 @@ class VABBimanualEnv(TwoArmEnv):
         observables = super()._setup_observables()
         for key in list(observables.keys()):
             if key in _PROPRIO_KEYS:
+                # Robosuite leaves ``robot{0,1}_joint_pos`` ``active=False`` by
+                # default; explicitly turn it on so per-arm proprio is
+                # actually in the obs dict.
+                observables[key].set_enabled(True)
+                observables[key].set_active(True)
                 continue
             if key.endswith("_image") or key.endswith("_depth"):
                 continue
@@ -180,6 +186,7 @@ class VABBimanualEnv(TwoArmEnv):
             self._obj_body_id,
             self.task.success.predicate,
             dict(self.task.success.args),
+            joint_names=getattr(self, "_obj_joint_name", None),
         )
 
     def reward(self, action=None) -> float:

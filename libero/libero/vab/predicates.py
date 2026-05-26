@@ -6,9 +6,16 @@ in the task YAML) to its MuJoCo body id. Predicates are registered in
 ``PREDICATES`` and looked up by name from the YAML.
 
 Adding a new predicate: implement a function, decorate with ``@register``.
+
+Stateful predicates (e.g. ``pack_all_into``) may declare an extra
+``joint_names`` kwarg to receive the per-object free-joint name table,
+needed for state mutations like teleporting delivered objects. ``evaluate``
+introspects the predicate signature and forwards ``joint_names`` only when
+declared, so stateless predicates stay unchanged.
 """
 from __future__ import annotations
 
+import inspect
 from typing import Callable, Dict
 
 import numpy as np
@@ -116,9 +123,72 @@ def lifted_above(
     return bool(_xyz(sim, body_ids[obj])[2] > z_min)
 
 
-def evaluate(sim, body_ids, predicate: str, args: dict) -> bool:
+# Far-away pose used by pack_all_into to retire delivered objects so
+# they cannot be knocked out of the container by a later placement.
+# Matches the LIBERO-PosVar Libero_Grocery_Packing graveyard convention.
+_PACKING_GRAVEYARD = (50.0, 50.0, 5.0)
+
+
+@register("pack_all_into")
+def pack_all_into(
+    sim,
+    body_ids,
+    *,
+    objs: list,
+    container: str,
+    joint_names: dict,
+    xy_tol: float = 0.10,
+    z_low: float = -0.05,
+    z_high: float = 0.25,
+) -> bool:
+    """Multi-object monotonic packing: every obj must land in container.
+
+    Each object that satisfies ``contained_in`` is marked delivered AND
+    teleported to a far graveyard pose so it cannot regress.
+
+    State lives on the sim as ``sim._packing_state`` (a dict with
+    ``objs`` tuple and ``delivered`` set). VABEnv.reset clears it; the
+    predicate also reinitializes if it sees an unfamiliar ``objs`` tuple.
+    """
+    state = getattr(sim, "_packing_state", None)
+    if state is None or state.get("objs") != tuple(objs):
+        state = {"objs": tuple(objs), "delivered": set()}
+        sim._packing_state = state
+
+    p_con = _xyz(sim, body_ids[container])
+    newly = False
+    gx, gy, gz = _PACKING_GRAVEYARD
+    for obj in objs:
+        if obj in state["delivered"]:
+            continue
+        p_obj = _xyz(sim, body_ids[obj])
+        dxy = float(np.linalg.norm(p_obj[:2] - p_con[:2]))
+        dz = float(p_obj[2] - p_con[2])
+        if dxy < xy_tol and z_low < dz < z_high:
+            state["delivered"].add(obj)
+            sim.data.set_joint_qpos(
+                joint_names[obj],
+                np.array([gx, gy, gz, 1.0, 0.0, 0.0, 0.0], dtype=np.float64),
+            )
+            newly = True
+    if newly:
+        sim.forward()
+    return len(state["delivered"]) == len(objs)
+
+
+def evaluate(
+    sim,
+    body_ids,
+    predicate: str,
+    args: dict,
+    *,
+    joint_names: dict | None = None,
+) -> bool:
     if predicate not in PREDICATES:
         raise KeyError(
             f"Unknown predicate {predicate!r}. Available: {sorted(PREDICATES)}"
         )
-    return PREDICATES[predicate](sim, body_ids, **args)
+    fn = PREDICATES[predicate]
+    if "joint_names" in inspect.signature(fn).parameters:
+        return fn(sim, body_ids, joint_names=joint_names, **args)
+    return fn(sim, body_ids, **args)
