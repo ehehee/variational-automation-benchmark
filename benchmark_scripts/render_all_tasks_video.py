@@ -3,7 +3,7 @@ EVERY init variant per task. Each (task, init) clip mirrors
 render_single_task: reset, settle for a few zero-action steps, capture
 the first camera's RGB, hold for HOLD_FRAMES frames.
 
-Output: videos/vab_all_tasks_all_seeds.mp4
+Output: videos/vab_all_trials.mp4
 
 Scope across the 6 committed suites:
     crate_washing                 1 task   x 5 inits
@@ -31,7 +31,7 @@ import numpy as np  # noqa: E402
 from libero.vab import load_task  # noqa: E402
 
 TASKS_DIR = _REPO / "tasks"
-OUT_PATH = _REPO / "videos" / "vab_all_tasks_all_seeds.mp4"
+OUT_PATH = _REPO / "videos" / "vab_all_trials.mp4"
 OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Same canvas as the previous all-tasks video so frames stay 800x640.
