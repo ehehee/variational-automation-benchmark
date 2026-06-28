@@ -1,12 +1,27 @@
 """Generate the libero_object_packing task suite from libero_object_all_variance.
 
+Sourced from the all-variance suite: its inits apply the full position +
+basket-swap + permutation perturbation, so the multi-object layouts carry the
+same rich, continuously-varied object positions as libero_object_all_variance
+rather than the fixed permutation-grid slots used previously. Because that
+variance can push objects (notably the large r=0.10 basket) to near-zero
+clearance, the build is *always* followed by a radius-aware separation pass:
+
+    python3 enforce_clearance.py tasks/libero_object_packing --margin 0.05 --write
+
+which re-separates every init in XY to a 5cm edge-to-edge gap. Run that step
+after re-running this script to keep the suite collision-free.
+
 Each output YAML reuses its source's arena, robot, cameras, objects, and
 inits verbatim; only ``id``, ``language``, ``success``, and ``metadata``
-change. Re-run after any init-pose refresh upstream to keep the suites in
-sync.
+change. The success predicate is overridden to ``pack_all_into`` (every
+non-basket object must end up in the basket), regardless of the source's
+single-object ``contained_in`` goal. Re-run after any init-pose refresh
+upstream to keep the suites in sync.
 
 Usage:
     python3 tools/build_object_packing.py
+    python3 enforce_clearance.py tasks/libero_object_packing --margin 0.05 --write
 """
 from __future__ import annotations
 
